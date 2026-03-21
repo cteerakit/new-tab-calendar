@@ -1,0 +1,86 @@
+const TOKEN_KEY = "google_access_token";
+const TOKEN_EXPIRY_KEY = "google_access_token_expiry";
+
+function getConfigClientId() {
+  if (globalThis.APP_CONFIG?.googleClientId) {
+    return globalThis.APP_CONFIG.googleClientId;
+  }
+  throw new Error("Google OAuth client ID is missing. Configure APP_CONFIG.googleClientId.");
+}
+
+function buildAuthUrl() {
+  const clientId = getConfigClientId();
+  const redirectUri = chrome.identity.getRedirectURL();
+  const state = crypto.randomUUID();
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "token",
+    scope: "https://www.googleapis.com/auth/calendar.readonly",
+    include_granted_scopes: "true",
+    prompt: "consent",
+    state
+  });
+
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+function parseTokenFromRedirect(redirectedTo) {
+  const hash = new URL(redirectedTo).hash.replace(/^#/, "");
+  const params = new URLSearchParams(hash);
+  const token = params.get("access_token");
+  const expiresInSeconds = Number(params.get("expires_in") ?? 0);
+  if (!token) {
+    throw new Error("Sign-in completed without an access token.");
+  }
+  return { token, expiresInSeconds };
+}
+
+export async function signInWithGoogle() {
+  const authUrl = buildAuthUrl();
+  const redirectedTo = await chrome.identity.launchWebAuthFlow({
+    url: authUrl,
+    interactive: true
+  });
+
+  if (!redirectedTo) {
+    throw new Error("Sign-in did not return an OAuth redirect URL.");
+  }
+
+  const { token, expiresInSeconds } = parseTokenFromRedirect(redirectedTo);
+  const expiryTimestampMs = Date.now() + expiresInSeconds * 1000;
+  await chrome.storage.local.set({
+    [TOKEN_KEY]: token,
+    [TOKEN_EXPIRY_KEY]: expiryTimestampMs
+  });
+  return token;
+}
+
+export async function getStoredToken() {
+  const data = await chrome.storage.local.get([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
+  const token = data[TOKEN_KEY];
+  const expiry = Number(data[TOKEN_EXPIRY_KEY] ?? 0);
+  if (!token || !expiry || Date.now() >= expiry) {
+    await chrome.storage.local.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
+    return null;
+  }
+  return token;
+}
+
+export async function signOut() {
+  const token = await getStoredToken();
+  await chrome.storage.local.remove([TOKEN_KEY, TOKEN_EXPIRY_KEY]);
+
+  if (token) {
+    const revokeUrl = `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`;
+    try {
+      await fetch(revokeUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }
+      });
+    } catch {
+      // Local sign-out should still work if revoke fails.
+    }
+  }
+}

@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>New Tab Calendar</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="clock-card" aria-label="Current date and time">
+        <div id="time" class="time">--:--</div>
+        <div id="date" class="date">Loading date...</div>
+      </section>
+
+      <section class="events-card" aria-label="Upcoming calendar events">
+        <header class="events-header">
+          <h1>Upcoming Events</h1>
+          <div class="actions">
+            <button id="signInButton" type="button">Sign in with Google</button>
+            <button id="refreshButton" type="button" hidden>Refresh</button>
+            <button id="signOutButton" type="button" hidden>Sign out</button>
+          </div>
+        </header>
+        <p id="statusText" class="status">Sign in to load events.</p>
+        <ul id="eventsList" class="events-list" aria-live="polite"></ul>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script type="module" src="newtab.js"></script>
+  </body>
+</html>
