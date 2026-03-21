@@ -3,14 +3,15 @@
 A minimal-dependency Chrome extension that replaces the new tab page with:
 
 - Current time and date
-- Upcoming events from your **primary Google Calendar**
+- Upcoming events from one or more selected Google Calendars
+- Configurable event sync window (next 7, 14, or 30 days)
 - Google sign-in, refresh, and sign-out actions
 
 ## Features
 
 - Manifest V3 compliant
 - Uses `chrome.identity.launchWebAuthFlow` for OAuth 2.0 sign-in
-- Uses Google Calendar API `events.list` for upcoming events
+- Uses Google Calendar API `calendarList.list` and `events.list`
 - No framework/build step (plain HTML/CSS/JavaScript)
 
 ## Files
@@ -20,7 +21,7 @@ A minimal-dependency Chrome extension that replaces the new tab page with:
 - `styles.css`: UI styling
 - `newtab.js`: UI logic, clock, and event rendering
 - `auth.js`: OAuth flow and token storage
-- `calendar.js`: Google Calendar API request
+- `calendar.js`: Google Calendar API requests (list calendars + fetch events)
 - `config.js`: local OAuth client ID
 - `config.example.js`: template config
 
@@ -56,3 +57,5 @@ A minimal-dependency Chrome extension that replaces the new tab page with:
   - `https://www.googleapis.com/auth/calendar.readonly`
 - Access tokens are stored locally and cleared on sign-out.
 - If a token expires, the extension prompts for sign-in again.
+- Use the settings button in the events header to choose which calendars sync.
+- Use the same settings panel to set how far ahead events are synced (7/14/30 days).

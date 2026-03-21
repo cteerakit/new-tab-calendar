@@ -6,26 +6,30 @@ function toCalendarQuery(params) {
   return query.toString();
 }
 
-function normalizeEvent(event) {
+function normalizeEvent(event, calendarMeta = {}) {
   const startValue = event.start?.dateTime ?? event.start?.date;
   return {
     id: event.id,
     summary: event.summary || "(No title)",
     location: event.location || "",
     htmlLink: event.htmlLink || "",
-    start: startValue ? new Date(startValue) : null
+    start: startValue ? new Date(startValue) : null,
+    calendarId: calendarMeta.id || "",
+    calendarSummary: calendarMeta.summary || ""
   };
 }
 
-export async function fetchUpcomingPrimaryEvents(accessToken, maxResults = 10) {
-  const query = toCalendarQuery({
-    singleEvents: true,
-    orderBy: "startTime",
-    timeMin: new Date().toISOString(),
-    maxResults
-  });
-  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?${query}`;
+function normalizeCalendar(calendar) {
+  return {
+    id: calendar.id,
+    summary: calendar.summary || "(Unnamed calendar)",
+    primary: Boolean(calendar.primary),
+    backgroundColor: calendar.backgroundColor || "",
+    selected: calendar.selected !== false
+  };
+}
 
+async function fetchJsonWithAuth(url, accessToken) {
   const response = await fetch(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`
@@ -40,6 +44,68 @@ export async function fetchUpcomingPrimaryEvents(accessToken, maxResults = 10) {
     throw new Error(`Calendar API request failed (${response.status}): ${message}`);
   }
 
-  const json = await response.json();
-  return Array.isArray(json.items) ? json.items.map(normalizeEvent) : [];
+  return response.json();
+}
+
+export async function fetchCalendars(accessToken) {
+  const query = toCalendarQuery({
+    minAccessRole: "reader",
+    showHidden: false
+  });
+  const url = `https://www.googleapis.com/calendar/v3/users/me/calendarList?${query}`;
+  const json = await fetchJsonWithAuth(url, accessToken);
+  return Array.isArray(json.items) ? json.items.map(normalizeCalendar) : [];
+}
+
+export async function fetchUpcomingEventsForCalendars(
+  accessToken,
+  calendarIds,
+  perCalendarLimit = 10,
+  syncRangeDays = 14
+) {
+  if (!Array.isArray(calendarIds) || !calendarIds.length) {
+    return [];
+  }
+
+  const normalizedDays = Number.isFinite(syncRangeDays) ? Math.max(1, Math.floor(syncRangeDays)) : 14;
+  const now = new Date();
+  const timeMax = new Date(now.getTime() + normalizedDays * 24 * 60 * 60 * 1000);
+
+  const query = toCalendarQuery({
+    singleEvents: true,
+    orderBy: "startTime",
+    timeMin: now.toISOString(),
+    timeMax: timeMax.toISOString(),
+    maxResults: perCalendarLimit
+  });
+
+  const requests = calendarIds.map(async (calendarId) => {
+    const encodedId = encodeURIComponent(calendarId);
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodedId}/events?${query}`;
+    const json = await fetchJsonWithAuth(url, accessToken);
+    const calendarSummary = json.summary || "";
+    const items = Array.isArray(json.items) ? json.items : [];
+    return items.map((event) => normalizeEvent(event, { id: calendarId, summary: calendarSummary }));
+  });
+
+  const settled = await Promise.allSettled(requests);
+  const merged = [];
+  for (const result of settled) {
+    if (result.status === "rejected") {
+      if (result.reason instanceof Error && result.reason.message === "unauthorized") {
+        throw result.reason;
+      }
+      continue;
+    }
+    merged.push(...result.value);
+  }
+
+  merged.sort((a, b) => {
+    if (!a.start && !b.start) return 0;
+    if (!a.start) return 1;
+    if (!b.start) return -1;
+    return a.start.getTime() - b.start.getTime();
+  });
+
+  return merged;
 }
