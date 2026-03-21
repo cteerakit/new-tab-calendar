@@ -322,6 +322,25 @@ button:hover {
   color: var(--muted);
 }
 
+.event-meet-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.event-meet-link:hover {
+  background: var(--button-bg-hover);
+}
+
 @media (max-width: 760px) {
   .event-row {
     grid-template-columns: 78px minmax(110px, 140px) minmax(0, 1fr);

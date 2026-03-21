@@ -342,6 +342,15 @@ function renderEvents(events) {
       if (meta.textContent) {
         detailsCol.appendChild(meta);
       }
+      if (event.meetLink) {
+        const meetLink = document.createElement("a");
+        meetLink.className = "event-meet-link";
+        meetLink.href = event.meetLink;
+        meetLink.target = "_blank";
+        meetLink.rel = "noopener noreferrer";
+        meetLink.textContent = "Join Meet";
+        detailsCol.appendChild(meetLink);
+      }
 
       row.appendChild(dateCol);
       row.appendChild(timeCol);

@@ -6,6 +6,30 @@ function toCalendarQuery(params) {
   return query.toString();
 }
 
+function isGoogleMeetUrl(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return url.hostname === "meet.google.com";
+  } catch {
+    return false;
+  }
+}
+
+function getGoogleMeetLink(event) {
+  if (isGoogleMeetUrl(event.hangoutLink)) {
+    return event.hangoutLink;
+  }
+  const entryPoints = event.conferenceData?.entryPoints;
+  if (!Array.isArray(entryPoints)) {
+    return "";
+  }
+  const videoEntry = entryPoints.find((entry) => isGoogleMeetUrl(entry?.uri));
+  return videoEntry?.uri || "";
+}
+
 function normalizeEvent(event, calendarMeta = {}) {
   const startValue = event.start?.dateTime ?? event.start?.date;
   return {
@@ -13,6 +37,7 @@ function normalizeEvent(event, calendarMeta = {}) {
     summary: event.summary || "(No title)",
     location: event.location || "",
     htmlLink: event.htmlLink || "",
+    meetLink: getGoogleMeetLink(event),
     start: startValue ? new Date(startValue) : null,
     calendarId: calendarMeta.id || "",
     calendarSummary: calendarMeta.summary || ""
