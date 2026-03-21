@@ -1,6 +1,7 @@
 const TOKEN_KEY = "google_access_token";
 const TOKEN_EXPIRY_KEY = "google_access_token_expiry";
 const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
+const OAUTH_STATE_KEY = "oauth_pending_state";
 
 function getConfigClientId() {
   if (globalThis.APP_CONFIG?.googleClientId) {
@@ -26,26 +27,45 @@ function buildAuthUrl(prompt) {
     params.set("prompt", prompt);
   }
 
-  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  return {
+    url: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+    state
+  };
 }
 
-function parseTokenFromRedirect(redirectedTo) {
+async function storePendingOAuthState(state) {
+  await chrome.storage.session.set({ [OAUTH_STATE_KEY]: state });
+}
+
+async function clearPendingOAuthState() {
+  await chrome.storage.session.remove([OAUTH_STATE_KEY]);
+}
+
+async function parseTokenFromRedirect(redirectedTo) {
   const hash = new URL(redirectedTo).hash.replace(/^#/, "");
   const params = new URLSearchParams(hash);
   const oauthError = params.get("error");
   const token = params.get("access_token");
   const expiresInSeconds = Number(params.get("expires_in") ?? 0);
+  const returnedState = params.get("state");
+  const data = await chrome.storage.session.get(OAUTH_STATE_KEY);
+  const expectedState = data[OAUTH_STATE_KEY];
+  await chrome.storage.session.remove([OAUTH_STATE_KEY]);
+
   if (oauthError) {
     throw new Error(`OAuth redirect error: ${oauthError}`);
   }
   if (!token) {
     throw new Error("Sign-in completed without an access token.");
   }
+  if (!expectedState || !returnedState || returnedState !== expectedState) {
+    throw new Error("OAuth state mismatch. Sign in again.");
+  }
   return { token, expiresInSeconds };
 }
 
 async function persistTokenFromRedirect(redirectedTo) {
-  const { token, expiresInSeconds } = parseTokenFromRedirect(redirectedTo);
+  const { token, expiresInSeconds } = await parseTokenFromRedirect(redirectedTo);
   const expiryTimestampMs = Date.now() + expiresInSeconds * 1000;
   await chrome.storage.local.set({
     [TOKEN_KEY]: token,
@@ -55,12 +75,14 @@ async function persistTokenFromRedirect(redirectedTo) {
 }
 
 async function refreshTokenSilently() {
-  const authUrl = buildAuthUrl("none");
+  const { url, state } = buildAuthUrl("none");
+  await storePendingOAuthState(state);
   const redirectedTo = await chrome.identity.launchWebAuthFlow({
-    url: authUrl,
+    url,
     interactive: false
   });
   if (!redirectedTo) {
+    await clearPendingOAuthState();
     throw new Error("Silent token refresh did not return an OAuth redirect URL.");
   }
   const { token } = await persistTokenFromRedirect(redirectedTo);
@@ -69,12 +91,14 @@ async function refreshTokenSilently() {
 
 /** When prompt=none fails (common with implicit flow), re-auth with a visible flow; omit prompt so Google can reuse session. */
 async function refreshTokenInteractive() {
-  const authUrl = buildAuthUrl();
+  const { url, state } = buildAuthUrl();
+  await storePendingOAuthState(state);
   const redirectedTo = await chrome.identity.launchWebAuthFlow({
-    url: authUrl,
+    url,
     interactive: true
   });
   if (!redirectedTo) {
+    await clearPendingOAuthState();
     throw new Error("Interactive token refresh did not return an OAuth redirect URL.");
   }
   const { token } = await persistTokenFromRedirect(redirectedTo);
@@ -82,13 +106,15 @@ async function refreshTokenInteractive() {
 }
 
 export async function signInWithGoogle() {
-  const authUrl = buildAuthUrl("consent");
+  const { url, state } = buildAuthUrl("consent");
+  await storePendingOAuthState(state);
   const redirectedTo = await chrome.identity.launchWebAuthFlow({
-    url: authUrl,
+    url,
     interactive: true
   });
 
   if (!redirectedTo) {
+    await clearPendingOAuthState();
     throw new Error("Sign-in did not return an OAuth redirect URL.");
   }
 

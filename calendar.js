@@ -30,15 +30,30 @@ function getGoogleMeetLink(event) {
   return videoEntry?.uri || "";
 }
 
+function parseEventStart(event) {
+  if (event.start?.dateTime) {
+    return { start: new Date(event.start.dateTime), allDay: false };
+  }
+  if (event.start?.date) {
+    const parts = event.start.date.split("-").map(Number);
+    if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
+      const [y, m, d] = parts;
+      return { start: new Date(y, m - 1, d), allDay: true };
+    }
+  }
+  return { start: null, allDay: false };
+}
+
 function normalizeEvent(event, calendarMeta = {}) {
-  const startValue = event.start?.dateTime ?? event.start?.date;
+  const { start, allDay } = parseEventStart(event);
   return {
     id: event.id,
     summary: event.summary || "(No title)",
     location: event.location || "",
     htmlLink: event.htmlLink || "",
     meetLink: getGoogleMeetLink(event),
-    start: startValue ? new Date(startValue) : null,
+    start,
+    allDay,
     calendarId: calendarMeta.id || "",
     calendarSummary: calendarMeta.summary || ""
   };
@@ -89,7 +104,7 @@ export async function fetchUpcomingEventsForCalendars(
   syncRangeDays = 14
 ) {
   if (!Array.isArray(calendarIds) || !calendarIds.length) {
-    return [];
+    return { events: [], loadFailures: [] };
   }
 
   const normalizedDays = Number.isFinite(syncRangeDays) ? Math.max(1, Math.floor(syncRangeDays)) : 14;
@@ -115,11 +130,17 @@ export async function fetchUpcomingEventsForCalendars(
 
   const settled = await Promise.allSettled(requests);
   const merged = [];
-  for (const result of settled) {
+  const loadFailures = [];
+  for (let i = 0; i < settled.length; i++) {
+    const result = settled[i];
+    const calendarId = calendarIds[i];
     if (result.status === "rejected") {
       if (result.reason instanceof Error && result.reason.message === "unauthorized") {
         throw result.reason;
       }
+      const message =
+        result.reason instanceof Error ? result.reason.message : String(result.reason);
+      loadFailures.push({ calendarId, message });
       continue;
     }
     merged.push(...result.value);
@@ -132,5 +153,5 @@ export async function fetchUpcomingEventsForCalendars(
     return a.start.getTime() - b.start.getTime();
   });
 
-  return merged;
+  return { events: merged, loadFailures };
 }

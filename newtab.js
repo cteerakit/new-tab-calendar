@@ -4,6 +4,7 @@ import { fetchCalendars, fetchUpcomingEventsForCalendars } from "./calendar.js";
 const timeEl = document.getElementById("time");
 const dateEl = document.getElementById("date");
 const statusEl = document.getElementById("statusText");
+const eventsLoadWarningEl = document.getElementById("eventsLoadWarning");
 const eventsListEl = document.getElementById("eventsList");
 const signInButton = document.getElementById("signInButton");
 const refreshButton = document.getElementById("refreshButton");
@@ -18,9 +19,9 @@ const themeToggleIcon = document.getElementById("themeToggleIcon");
 const THEME_KEY = "theme_preference";
 const SELECTED_CALENDAR_IDS_KEY = "selected_calendar_ids_v1";
 const SYNC_RANGE_DAYS_KEY = "sync_range_days_v1";
-const EVENTS_CACHE_KEY = "cached_events_v2";
-const EVENTS_CACHE_TS_KEY = "cached_events_ts_v2";
-const EVENTS_CACHE_SELECTION_KEY = "cached_events_selected_ids_v2";
+const EVENTS_CACHE_KEY = "cached_events_v3";
+const EVENTS_CACHE_TS_KEY = "cached_events_ts_v3";
+const EVENTS_CACHE_SELECTION_KEY = "cached_events_selected_ids_v3";
 const EVENTS_CACHE_RANGE_KEY = "cached_events_sync_range_v1";
 const EVENTS_CACHE_TTL_MS = 60 * 1000;
 const LOADING_SPINNER_DELAY_MS = 250;
@@ -100,6 +101,25 @@ function formatTimeRange(date) {
     hour: "numeric",
     minute: "2-digit"
   });
+}
+
+function formatEventTimeLabel(event) {
+  if (!event.start) {
+    return "Time TBD";
+  }
+  if (event.allDay) {
+    return "All day";
+  }
+  return formatTimeRange(event.start);
+}
+
+function formatLoadFailureMessage(loadFailures, calendars) {
+  const idToName = new Map(calendars.map((c) => [c.id, c.summary]));
+  const names = loadFailures.map((f) => idToName.get(f.calendarId) || f.calendarId);
+  if (names.length === 1) {
+    return `Could not load calendar: ${names[0]}.`;
+  }
+  return `Could not load some calendars: ${names.join(", ")}.`;
 }
 
 function getEventDayKey(event) {
@@ -239,7 +259,8 @@ function readCachedEvents() {
 
     const events = parsedEvents.map((event) => ({
       ...event,
-      start: event.start ? new Date(event.start) : null
+      start: event.start ? new Date(event.start) : null,
+      allDay: Boolean(event.allDay)
     }));
     const fetchedAt = Number(rawTimestamp) || 0;
     const selectedIds = parsedSelection.filter((id) => typeof id === "string" && id);
@@ -264,14 +285,29 @@ function clearCachedEvents() {
   localStorage.removeItem(EVENTS_CACHE_RANGE_KEY);
 }
 
-function renderEvents(events) {
+function renderEvents(events, loadFailures = [], calendars = []) {
   eventsListEl.replaceChildren();
   if (!events.length) {
-    statusEl.textContent = "No upcoming events found.";
+    if (loadFailures.length) {
+      statusEl.textContent = "";
+      eventsLoadWarningEl.hidden = false;
+      eventsLoadWarningEl.textContent = formatLoadFailureMessage(loadFailures, calendars);
+    } else {
+      statusEl.textContent = "No upcoming events found.";
+      eventsLoadWarningEl.hidden = true;
+      eventsLoadWarningEl.textContent = "";
+    }
     return;
   }
 
   statusEl.textContent = "";
+  if (loadFailures.length && calendars.length) {
+    eventsLoadWarningEl.hidden = false;
+    eventsLoadWarningEl.textContent = formatLoadFailureMessage(loadFailures, calendars);
+  } else {
+    eventsLoadWarningEl.hidden = true;
+    eventsLoadWarningEl.textContent = "";
+  }
   const dayGroups = groupEventsByDay(events);
   const nodes = dayGroups.map((group) => {
     const dayItem = document.createElement("li");
@@ -308,7 +344,7 @@ function renderEvents(events) {
       }
       const time = document.createElement("span");
       time.className = "event-time";
-      time.textContent = event.start ? formatTimeRange(event.start) : "Time TBD";
+      time.textContent = formatEventTimeLabel(event);
       timeCol.appendChild(dot);
       timeCol.appendChild(time);
 
@@ -329,14 +365,9 @@ function renderEvents(events) {
 
       const meta = document.createElement("div");
       meta.className = "event-meta";
-      const parts = [];
       if (event.location) {
-        parts.push(event.location);
+        meta.textContent = event.location;
       }
-      if (event.calendarSummary) {
-        parts.push(event.calendarSummary);
-      }
-      meta.textContent = parts.join(" - ");
 
       detailsCol.appendChild(title);
       if (meta.textContent) {
@@ -430,6 +461,8 @@ async function loadEvents({ force = false } = {}) {
     calendarStatusEl.textContent = "";
     calendarsListEl.replaceChildren();
     eventsListEl.replaceChildren();
+    eventsLoadWarningEl.hidden = true;
+    eventsLoadWarningEl.textContent = "";
     clearCachedEvents();
     return;
   }
@@ -452,6 +485,8 @@ async function loadEvents({ force = false } = {}) {
     if (!selectedIds.length) {
       statusEl.textContent = "Select at least one calendar in settings.";
       eventsListEl.replaceChildren();
+      eventsLoadWarningEl.hidden = true;
+      eventsLoadWarningEl.textContent = "";
       return;
     }
 
@@ -473,7 +508,7 @@ async function loadEvents({ force = false } = {}) {
       return;
     }
 
-    const mergedEvents = await fetchUpcomingEventsForCalendars(
+    const { events: mergedEvents, loadFailures } = await fetchUpcomingEventsForCalendars(
       token,
       selectedIds,
       PER_CALENDAR_LIMIT,
@@ -482,7 +517,7 @@ async function loadEvents({ force = false } = {}) {
     const calendarColorMap = buildCalendarColorMap(calendars);
     const coloredEvents = attachCalendarColors(mergedEvents, calendarColorMap);
     const nextEvents = coloredEvents.slice(0, TOTAL_EVENTS_LIMIT);
-    renderEvents(nextEvents);
+    renderEvents(nextEvents, loadFailures, calendars);
     writeCachedEvents(nextEvents, selectedIds, syncRangeDays);
   } catch (error) {
     if (error instanceof Error && error.message === "unauthorized") {
@@ -492,12 +527,16 @@ async function loadEvents({ force = false } = {}) {
       calendarStatusEl.textContent = "";
       calendarsListEl.replaceChildren();
       eventsListEl.replaceChildren();
+      eventsLoadWarningEl.hidden = true;
+      eventsLoadWarningEl.textContent = "";
       clearCachedEvents();
       await signOut();
       return;
     }
     statusEl.textContent = "Could not load events. Try refreshing.";
     calendarStatusEl.textContent = "Could not load calendars.";
+    eventsLoadWarningEl.hidden = true;
+    eventsLoadWarningEl.textContent = "";
   } finally {
     clearTimeout(loadingTimer);
     if (!didShowLoading) {
