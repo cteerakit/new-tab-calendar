@@ -1,4 +1,9 @@
-import { getStoredToken, signInWithGoogle, signOut } from "./auth.js";
+import {
+  getStoredToken,
+  recoverSessionAfterUnauthorized,
+  signInWithGoogle,
+  signOut
+} from "./auth.js";
 import { fetchCalendars, fetchUpcomingEventsForCalendars } from "./calendar.js";
 
 const timeEl = document.getElementById("time");
@@ -450,7 +455,7 @@ function renderCachedEventsImmediately() {
   return false;
 }
 
-async function loadEvents({ force = false } = {}) {
+async function loadEvents({ force = false, allowUnauthorizedRecovery = true } = {}) {
   const token = await getStoredToken();
   if (!token) {
     cachedCalendars = [];
@@ -521,6 +526,13 @@ async function loadEvents({ force = false } = {}) {
     writeCachedEvents(nextEvents, selectedIds, syncRangeDays);
   } catch (error) {
     if (error instanceof Error && error.message === "unauthorized") {
+      if (allowUnauthorizedRecovery) {
+        const recovered = await recoverSessionAfterUnauthorized();
+        if (recovered) {
+          await loadEvents({ force: true, allowUnauthorizedRecovery: false });
+          return;
+        }
+      }
       setSignedInUi(false);
       setSettingsEnabled(false);
       statusEl.textContent = "Session expired. Sign in again.";

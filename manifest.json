@@ -4,7 +4,16 @@
   "description": "Replaces new tab with time, date, and upcoming Google Calendar events.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsSccrGn6mEjiqElqdFWKup/YeK5EYYM7QTT9rjgosaayfJNB3RgrHhpfuvKlY5babGBZaRCekOh/l3Kkz72R9mrcHEoDT7s90+7Hg/ZSoGeBdw65Y6hXDbuLMHeqcK2dxL98ttAm6qb9Rer5GMBctvEId7S1UUEMTuiu4ZFArxyarBjhv4zwcBRQpXa/po/6CX2B2tqjzWG5Xnui6yi52YdN0Le/ZaZ9Co+j2/FZ2ev98od6vzyCUYpRSihTAC6NDdUaYjcrZTnQjLePm8iTZgYNBvhg/RKXm/byfwIO/L45mXWFXw/oIeSIheON6q3jDCUKP2iSG1JVZhQoM3+tDQIDAQAB",
   "version": "0.1.0",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": ["identity", "storage"],
+  "oauth2": {
+    "client_id": "680388862326-tg94r9nmcl8m5gjk20fl6hchink2j0nh.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/calendar.readonly"]
+  },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com"
   },
