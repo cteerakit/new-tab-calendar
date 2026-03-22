@@ -19,12 +19,27 @@
         <div id="date" class="date">Loading date...</div>
       </section>
 
-      <section class="events-card" aria-label="Upcoming calendar events">
+      <section class="events-card" aria-label="Calendar events">
         <header class="events-header">
-          <h1>Upcoming Events</h1>
+          <h1>Events</h1>
           <div class="actions">
-            <button id="signInButton" type="button">Sign in with Google</button>
-            <button id="refreshButton" class="icon-button" type="button" aria-label="Refresh events" hidden>
+            <button
+              id="signInButton"
+              type="button"
+              data-tooltip="Connect your Google account to load calendar events"
+              data-tooltip-pos="bottom"
+            >
+              Sign in with Google
+            </button>
+            <button
+              id="refreshButton"
+              class="icon-button"
+              type="button"
+              aria-label="Refresh events"
+              data-tooltip="Refresh"
+              data-tooltip-pos="bottom"
+              hidden
+            >
               <span class="material-symbols-rounded" aria-hidden="true">refresh</span>
             </button>
             <button
@@ -34,6 +49,8 @@
               aria-label="Calendar settings"
               aria-expanded="false"
               aria-controls="settingsPanel"
+              data-tooltip="Settings"
+              data-tooltip-pos="bottom"
               hidden
             >
               <span class="material-symbols-rounded" aria-hidden="true">settings</span>
@@ -55,12 +72,43 @@
         </section>
         <p id="statusText" class="status">Sign in to load events.</p>
         <p id="eventsLoadWarning" class="status status-warning" hidden></p>
-        <ul id="eventsList" class="events-list" aria-live="polite"></ul>
+        <div id="eventsSections" class="events-sections" aria-live="polite" hidden>
+          <section class="events-block" aria-labelledby="todayEventsHeading">
+            <h2 id="todayEventsHeading" class="events-subheading">Today</h2>
+            <ul id="todayEventsList" class="events-list"></ul>
+            <p id="todayEventsEmpty" class="events-empty" hidden>No events today.</p>
+          </section>
+          <section class="events-block" aria-labelledby="upcomingEventsHeading">
+            <h2 id="upcomingEventsHeading" class="events-subheading">Upcoming</h2>
+            <ul id="upcomingEventsList" class="events-list"></ul>
+            <p id="upcomingEventsEmpty" class="events-empty" hidden>No upcoming events.</p>
+          </section>
+        </div>
       </section>
     </main>
-    <button id="themeToggleButton" class="theme-toggle" type="button" aria-label="Toggle theme">
-      <span id="themeToggleIcon" class="material-symbols-rounded" aria-hidden="true">dark_mode</span>
-    </button>
+    <div class="floating-actions" role="toolbar" aria-label="Page actions">
+      <a
+        class="support-link"
+        href="https://buymeacoffee.com/cteerakit"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Support on Buy Me a Coffee"
+        data-tooltip="Donate"
+        data-tooltip-pos="top"
+      >
+        <span class="material-symbols-rounded" aria-hidden="true">local_cafe</span>
+      </a>
+      <button
+        id="themeToggleButton"
+        class="theme-toggle"
+        type="button"
+        aria-label="Switch to light mode"
+        data-tooltip="Mode"
+        data-tooltip-pos="top"
+      >
+        <span id="themeToggleIcon" class="material-symbols-rounded" aria-hidden="true">dark_mode</span>
+      </button>
+    </div>
 
     <script src="config.js"></script>
     <script type="module" src="newtab.js"></script>

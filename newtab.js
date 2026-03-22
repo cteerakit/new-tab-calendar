@@ -10,7 +10,11 @@ const timeEl = document.getElementById("time");
 const dateEl = document.getElementById("date");
 const statusEl = document.getElementById("statusText");
 const eventsLoadWarningEl = document.getElementById("eventsLoadWarning");
-const eventsListEl = document.getElementById("eventsList");
+const eventsSectionsEl = document.getElementById("eventsSections");
+const todayEventsListEl = document.getElementById("todayEventsList");
+const upcomingEventsListEl = document.getElementById("upcomingEventsList");
+const todayEventsEmptyEl = document.getElementById("todayEventsEmpty");
+const upcomingEventsEmptyEl = document.getElementById("upcomingEventsEmpty");
 const signInButton = document.getElementById("signInButton");
 const refreshButton = document.getElementById("refreshButton");
 const settingsButton = document.getElementById("settingsButton");
@@ -108,6 +112,11 @@ function formatTimeRange(date) {
   });
 }
 
+function googleMapsSearchUrlForLocation(location) {
+  const params = new URLSearchParams({ api: "1", query: location });
+  return `https://www.google.com/maps/search/?${params}`;
+}
+
 function formatEventTimeLabel(event) {
   if (!event.start) {
     return "Time TBD";
@@ -149,6 +158,36 @@ function groupEventsByDay(events) {
     lastGroup.events.push(event);
   }
   return groups;
+}
+
+function getTodayLocalDayKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function partitionEventsTodayAndUpcoming(events) {
+  const todayKey = getTodayLocalDayKey();
+  const today = [];
+  const upcoming = [];
+  for (const event of events) {
+    if (getEventDayKey(event) === todayKey) {
+      today.push(event);
+    } else {
+      upcoming.push(event);
+    }
+  }
+  return { today, upcoming };
+}
+
+function clearEventsSections() {
+  todayEventsListEl.replaceChildren();
+  upcomingEventsListEl.replaceChildren();
+  todayEventsEmptyEl.hidden = true;
+  upcomingEventsEmptyEl.hidden = true;
+  eventsSectionsEl.hidden = true;
 }
 
 function buildCalendarColorMap(calendars) {
@@ -290,8 +329,107 @@ function clearCachedEvents() {
   localStorage.removeItem(EVENTS_CACHE_RANGE_KEY);
 }
 
+function createDayGroupElement(group) {
+  const dayItem = document.createElement("li");
+  dayItem.className = "event-day";
+
+  const rows = document.createElement("div");
+  rows.className = "event-day-rows";
+
+  group.events.forEach((event, index) => {
+    const row = document.createElement("article");
+    row.className = "event-row";
+
+    const dateCol = document.createElement("div");
+    dateCol.className = "event-date-col";
+    if (index === 0 && event.start) {
+      const { day, monthWeekday } = formatDayDate(event.start);
+      const dayNum = document.createElement("div");
+      dayNum.className = "event-date-day";
+      dayNum.textContent = day;
+      const dayLabel = document.createElement("div");
+      dayLabel.className = "event-date-label";
+      dayLabel.textContent = monthWeekday;
+      dateCol.appendChild(dayNum);
+      dateCol.appendChild(dayLabel);
+    }
+
+    const timeCol = document.createElement("div");
+    timeCol.className = "event-time-col";
+    const dot = document.createElement("span");
+    dot.className = "event-dot";
+    dot.setAttribute("aria-hidden", "true");
+    if (event.calendarColor) {
+      dot.style.backgroundColor = event.calendarColor;
+    }
+    const time = document.createElement("span");
+    time.className = "event-time";
+    time.textContent = formatEventTimeLabel(event);
+    timeCol.appendChild(dot);
+    timeCol.appendChild(time);
+
+    const detailsCol = document.createElement("div");
+    detailsCol.className = "event-details-col";
+    const title = document.createElement("div");
+    title.className = "event-title";
+    if (event.htmlLink) {
+      const link = document.createElement("a");
+      link.href = event.htmlLink;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = event.summary;
+      title.appendChild(link);
+    } else {
+      title.textContent = event.summary;
+    }
+
+    const meta = document.createElement("div");
+    meta.className = "event-meta";
+    const locationText = typeof event.location === "string" ? event.location.trim() : "";
+    if (locationText) {
+      const locationLink = document.createElement("a");
+      locationLink.className = "event-location-link";
+      locationLink.href = googleMapsSearchUrlForLocation(locationText);
+      locationLink.target = "_blank";
+      locationLink.rel = "noopener noreferrer";
+      locationLink.textContent = locationText;
+      locationLink.setAttribute(
+        "aria-label",
+        `Open location in Google Maps: ${locationText}`
+      );
+      meta.appendChild(locationLink);
+    }
+
+    detailsCol.appendChild(title);
+    if (locationText) {
+      detailsCol.appendChild(meta);
+    }
+    if (event.meetLink) {
+      const meetLink = document.createElement("a");
+      meetLink.className = "event-meet-link";
+      meetLink.href = event.meetLink;
+      meetLink.target = "_blank";
+      meetLink.rel = "noopener noreferrer";
+      meetLink.textContent = "Join Meet";
+      detailsCol.appendChild(meetLink);
+    }
+
+    row.appendChild(dateCol);
+    row.appendChild(timeCol);
+    row.appendChild(detailsCol);
+    rows.appendChild(row);
+  });
+
+  dayItem.appendChild(rows);
+  return dayItem;
+}
+
+function buildEventListNodes(events) {
+  return groupEventsByDay(events).map((group) => createDayGroupElement(group));
+}
+
 function renderEvents(events, loadFailures = [], calendars = []) {
-  eventsListEl.replaceChildren();
+  clearEventsSections();
   if (!events.length) {
     if (loadFailures.length) {
       statusEl.textContent = "";
@@ -313,92 +451,13 @@ function renderEvents(events, loadFailures = [], calendars = []) {
     eventsLoadWarningEl.hidden = true;
     eventsLoadWarningEl.textContent = "";
   }
-  const dayGroups = groupEventsByDay(events);
-  const nodes = dayGroups.map((group) => {
-    const dayItem = document.createElement("li");
-    dayItem.className = "event-day";
 
-    const rows = document.createElement("div");
-    rows.className = "event-day-rows";
-
-    group.events.forEach((event, index) => {
-      const row = document.createElement("article");
-      row.className = "event-row";
-
-      const dateCol = document.createElement("div");
-      dateCol.className = "event-date-col";
-      if (index === 0 && event.start) {
-        const { day, monthWeekday } = formatDayDate(event.start);
-        const dayNum = document.createElement("div");
-        dayNum.className = "event-date-day";
-        dayNum.textContent = day;
-        const dayLabel = document.createElement("div");
-        dayLabel.className = "event-date-label";
-        dayLabel.textContent = monthWeekday;
-        dateCol.appendChild(dayNum);
-        dateCol.appendChild(dayLabel);
-      }
-
-      const timeCol = document.createElement("div");
-      timeCol.className = "event-time-col";
-      const dot = document.createElement("span");
-      dot.className = "event-dot";
-      dot.setAttribute("aria-hidden", "true");
-      if (event.calendarColor) {
-        dot.style.backgroundColor = event.calendarColor;
-      }
-      const time = document.createElement("span");
-      time.className = "event-time";
-      time.textContent = formatEventTimeLabel(event);
-      timeCol.appendChild(dot);
-      timeCol.appendChild(time);
-
-      const detailsCol = document.createElement("div");
-      detailsCol.className = "event-details-col";
-      const title = document.createElement("div");
-      title.className = "event-title";
-      if (event.htmlLink) {
-        const link = document.createElement("a");
-        link.href = event.htmlLink;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.textContent = event.summary;
-        title.appendChild(link);
-      } else {
-        title.textContent = event.summary;
-      }
-
-      const meta = document.createElement("div");
-      meta.className = "event-meta";
-      if (event.location) {
-        meta.textContent = event.location;
-      }
-
-      detailsCol.appendChild(title);
-      if (meta.textContent) {
-        detailsCol.appendChild(meta);
-      }
-      if (event.meetLink) {
-        const meetLink = document.createElement("a");
-        meetLink.className = "event-meet-link";
-        meetLink.href = event.meetLink;
-        meetLink.target = "_blank";
-        meetLink.rel = "noopener noreferrer";
-        meetLink.textContent = "Join Meet";
-        detailsCol.appendChild(meetLink);
-      }
-
-      row.appendChild(dateCol);
-      row.appendChild(timeCol);
-      row.appendChild(detailsCol);
-      rows.appendChild(row);
-    });
-
-    dayItem.appendChild(rows);
-    return dayItem;
-  });
-
-  eventsListEl.replaceChildren(...nodes);
+  const { today, upcoming } = partitionEventsTodayAndUpcoming(events);
+  todayEventsListEl.replaceChildren(...buildEventListNodes(today));
+  upcomingEventsListEl.replaceChildren(...buildEventListNodes(upcoming));
+  todayEventsEmptyEl.hidden = today.length > 0;
+  upcomingEventsEmptyEl.hidden = upcoming.length > 0;
+  eventsSectionsEl.hidden = false;
 }
 
 function createCalendarRow(calendar, selectedIds) {
@@ -465,7 +524,7 @@ async function loadEvents({ force = false, allowUnauthorizedRecovery = true } = 
     statusEl.textContent = "Sign in to load events.";
     calendarStatusEl.textContent = "";
     calendarsListEl.replaceChildren();
-    eventsListEl.replaceChildren();
+    clearEventsSections();
     eventsLoadWarningEl.hidden = true;
     eventsLoadWarningEl.textContent = "";
     clearCachedEvents();
@@ -489,7 +548,7 @@ async function loadEvents({ force = false, allowUnauthorizedRecovery = true } = 
 
     if (!selectedIds.length) {
       statusEl.textContent = "Select at least one calendar in settings.";
-      eventsListEl.replaceChildren();
+      clearEventsSections();
       eventsLoadWarningEl.hidden = true;
       eventsLoadWarningEl.textContent = "";
       return;
@@ -538,7 +597,7 @@ async function loadEvents({ force = false, allowUnauthorizedRecovery = true } = 
       statusEl.textContent = "Session expired. Sign in again.";
       calendarStatusEl.textContent = "";
       calendarsListEl.replaceChildren();
-      eventsListEl.replaceChildren();
+      clearEventsSections();
       eventsLoadWarningEl.hidden = true;
       eventsLoadWarningEl.textContent = "";
       clearCachedEvents();
@@ -547,6 +606,7 @@ async function loadEvents({ force = false, allowUnauthorizedRecovery = true } = 
     }
     statusEl.textContent = "Could not load events. Try refreshing.";
     calendarStatusEl.textContent = "Could not load calendars.";
+    clearEventsSections();
     eventsLoadWarningEl.hidden = true;
     eventsLoadWarningEl.textContent = "";
   } finally {
