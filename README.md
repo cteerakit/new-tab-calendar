@@ -10,7 +10,7 @@ A minimal-dependency Chrome extension that replaces the new tab page with:
 ## Features
 
 - Manifest V3 compliant
-- Uses `chrome.identity.launchWebAuthFlow` for OAuth 2.0 sign-in
+- Uses `chrome.identity.launchWebAuthFlow` for OAuth 2.0 (authorization code + PKCE)
 - Uses Google Calendar API `calendarList.list` and `events.list`
 - No framework/build step (plain HTML/CSS/JavaScript)
 
@@ -48,14 +48,14 @@ A minimal-dependency Chrome extension that replaces the new tab page with:
 ## Permissions used
 
 - `identity`: Google OAuth sign-in flow
-- `storage`: Save access token and expiry
+- `storage`: Save access token, refresh token, and expiry
 - `https://www.googleapis.com/*`: Calendar API calls
 
 ## Notes
 
 - The extension requests only:
   - `https://www.googleapis.com/auth/calendar.readonly`
-- Access tokens are stored locally and cleared on sign-out.
-- If a token expires, the extension prompts for sign-in again.
+- Access and refresh tokens are stored locally and cleared on sign-out.
+- OAuth uses the authorization code flow with PKCE; access tokens are renewed with the refresh token until you sign out or revoke the app.
 - Use the settings button in the events header to choose which calendars sync.
 - Use the same settings panel to set how far ahead events are synced (7/14/30 days).
