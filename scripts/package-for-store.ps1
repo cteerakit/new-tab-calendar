@@ -12,6 +12,11 @@ $manifestPath = Join-Path $root "manifest.json"
 $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
 $version = $manifest.version
 
+$cid = [string]$manifest.oauth2.client_id
+if (-not $cid -or $cid -match "YOUR_GOOGLE_OAUTH") {
+  throw "manifest.json oauth2.client_id must be set to your Google Cloud 'Chrome extension' OAuth client ID (not the placeholder). See README.md Setup."
+}
+
 $dist = Join-Path $root "dist"
 $staging = Join-Path $dist "_staging"
 

@@ -17,11 +17,14 @@ function explainIdentityOAuthError(message) {
   if (typeof message !== "string") {
     return message;
   }
-  if (!/bad client id/i.test(message)) {
-    return message;
-  }
   const extId = chrome.runtime.id;
-  return `${message} In Google Cloud Console, create credentials of type "Chrome extension" (not Web application), paste this Extension ID in the form, then put the new client ID in manifest.json oauth2.client_id. This extension’s ID: ${extId}`;
+  if (/bad client id/i.test(message)) {
+    return `${message} In Google Cloud Console, create credentials of type "Chrome extension" (not Web application), paste this Extension ID in the form, then put the new client ID in manifest.json oauth2.client_id. This extension’s ID: ${extId}`;
+  }
+  if (/deleted[_ ]client/i.test(message)) {
+    return `${message}. Often the OAuth client is fine in Google Cloud but the Chrome extension OAuth "Item ID" does not match this install’s id (${extId}). Use chrome://extensions on the Web Store build and ensure that id matches the OAuth client; remove a mismatched manifest "key" for store updates. If the client was deleted, create a new Chrome extension OAuth client and update manifest.json oauth2.client_id.`;
+  }
+  return message;
 }
 
 function getAuthTokenDetails(interactive) {
